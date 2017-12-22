@@ -38,8 +38,8 @@ using tensorflow::Status;
 using tensorflow::string;
 using tensorflow::int32;
 
-// Reads a model graph definition from disk, and creates a session object you
-// can use to run it.
+/** Read a model graph definition (xxx.pb) from disk, and creates a session object you can use to run it.
+ */
 Status loadGraph(const string &graph_file_name,
                  std::unique_ptr<tensorflow::Session> *session) {
     tensorflow::GraphDef graph_def;
@@ -57,6 +57,8 @@ Status loadGraph(const string &graph_file_name,
     return Status::OK();
 }
 
+/** Read a labels map file (xxx.pbtxt) from disk to translate class numbers into human-readable labels.
+ */
 Status readLabelsFile(const string &file_name) {
     // TODO: implement
     return Status::OK();
@@ -84,8 +86,9 @@ static Status ReadEntireFile(tensorflow::Env* env, const string& filename,
     return Status::OK();
 }
 
-// Given an image file name, read in the data, try to decode it as an image,
-// resize it to the requested size, and then scale the values as desired.
+/** Given an image file name, read in the data, try to decode it as an image,
+ *  resize it to the requested size, and then scale the values as desired.
+ */
 Status readTensorFromImageFile(const string &file_name, const int input_height,
                                const int input_width, const float input_mean,
                                const float input_std,
@@ -160,6 +163,8 @@ Status readTensorFromImageFile(const string &file_name, const int input_height,
     return Status::OK();
 }
 
+/** Convert Mat image into tensor of shape (1, height, width, d) where last three dims are equal to the original dims.
+ */
 Status readTensorFromMat(Mat mat, int inputDepth, Tensor &tensor) {
 
     auto root = tensorflow::Scope::NewRootScope();
@@ -206,8 +211,8 @@ Status readTensorFromMat(Mat mat, int inputDepth, Tensor &tensor) {
     return Status::OK();
 }
 
-/** Draw bounding box and add caption to the image according to arguments passed.
- *  Boolean flag scaled shows if the passed coordinates are in relative units (true by default in tensorflow detection)
+/** Draw bounding box and add caption to the image.
+ *  Boolean flag _scaled_ shows if the passed coordinates are in relative units (true by default in tensorflow detection)
  */
 void drawBoundingBoxOnImage(Mat &image, double yMin, double xMin, double yMax, double xMax, double score, std::string label, bool scaled=true) {
     cv::Point tl, br;
@@ -233,8 +238,9 @@ void drawBoundingBoxOnImage(Mat &image, double yMin, double xMin, double yMax, d
     cv::Point textCorner = cv::Point(tl.x, tl.y + fontCoeff * 0.9);
     cv::putText(image, caption, textCorner, FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 0, 0));
 }
-/*
- *
+
+/** Draw bounding boxes and add captions to the image.
+ *  Box is drawn only if corresponding score is higher than the _threshold_.
  */
 void drawBoundingBoxesOnImage(Mat &image,
                               tensorflow::TTypes<float>::Flat scores,
