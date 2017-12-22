@@ -1,24 +1,3 @@
-// A minimal but useful C++ example showing how to load an Imagenet-style object
-// recognition TensorFlow model, prepare input images for it, run them through
-// the graph, and interpret the results.
-//
-// It's designed to have as few dependencies and be as clear as possible, so
-// it's more verbose than it could be in production code. In particular, using
-// auto for the types of a lot of the returned values from TensorFlow calls can
-// remove a lot of boilerplate, but I find the explicit types useful in sample
-// code to make it simple to look up the classes involved.
-//
-// To use it, compile and then run in a working directory with the
-// learning/brain/tutorials/label_image/data/ folder below it, and you should
-// see the top five labels for the example Lena image output. You can then
-// customize it to use your own models or images by changing the file names at
-// the top of the main() function.
-//
-// The googlenet_graph.pb file included by default is created from Inception.
-//
-// Note that, for GIF inputs, to reuse existing code, only single-frame ones
-// are supported.
-
 #include <fstream>
 #include <utility>
 #include <vector>
