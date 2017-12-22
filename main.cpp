@@ -140,9 +140,9 @@ int main(int argc, char* argv[]) {
 
     std::map<int, std::string> labelsMap = std::map<int,std::string>();
     for (int i = 0; i < 21; i++)
-        labelsMap[i] = "test label #" + to_string(i);
+        labelsMap[i] = "label_" + to_string(i);
 
-    VideoCapture cap("/data/Y.Disk/work/visme/data/raw/test_left.wmv");
+    VideoCapture cap(0);//"/data/Y.Disk/work/visme/data/raw/test_left.wmv");
     Mat frame;
     Tensor tensor;
     while (cap.isOpened()) {
@@ -176,6 +176,7 @@ int main(int argc, char* argv[]) {
             if(scores(i) > 0.5)
                 LOG(INFO) << i << ",score:" << scores(i) << ",class:" << classes(i)<< ",box:" << "," << boxes(0,i,0) << "," << boxes(0,i,1) << "," << boxes(0,i,2)<< "," << boxes(0,i,3);
 
+        cvtColor(frame, frame, COLOR_BGR2RGB);
         drawBoundingBoxesOnImage(frame, scores, classes, boxes, labelsMap, 0.5);
         imshow("stream", frame);
         waitKey(10);

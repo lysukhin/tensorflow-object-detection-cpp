@@ -1,5 +1,6 @@
 #include "utils.h"
 
+#include <math.h>
 #include <fstream>
 #include <utility>
 #include <vector>
@@ -205,6 +206,9 @@ Status readTensorFromMat(Mat mat, int inputDepth, Tensor &tensor) {
     return Status::OK();
 }
 
+/** Draw bounding box and add caption to the image according to arguments passed.
+ *  Boolean flag scaled shows if the passed coordinates are in relative units (true by default in tensorflow detection)
+ */
 void drawBoundingBoxOnImage(Mat &image, double yMin, double xMin, double yMax, double xMax, double score, std::string label, bool scaled=true) {
     cv::Point tl, br;
     if (scaled) {
@@ -215,10 +219,23 @@ void drawBoundingBoxOnImage(Mat &image, double yMin, double xMin, double yMax, d
         br = cv::Point((int) xMax, (int) yMax);
     }
     cout << tl << " and " << br << endl;
-    cv::rectangle(image, tl, br, cv::Scalar(0, 255, 0), 2);
-    //TODO: implement
-}
+    cv::rectangle(image, tl, br, cv::Scalar(0, 255, 255), 1);
 
+    // Ceiling the score down to 3 decimals (weird!)
+    float scoreRounded = floorf(score * 1000) / 1000;
+    string scoreString = to_string(scoreRounded).substr(0, 5);
+    string caption = label + " (" + scoreString + ")";
+
+    // Adding caption of type "LABEL (X.XXX)" to the top-left corner of the bounding box
+    int fontCoeff = 12;
+    cv::Point brRect = cv::Point(tl.x + caption.length() * fontCoeff / 1.8, tl.y + fontCoeff);
+    cv::rectangle(image, tl, brRect, cv::Scalar(0, 255, 255), -1);
+    cv::Point textCorner = cv::Point(tl.x, tl.y + fontCoeff * 0.9);
+    cv::putText(image, caption, textCorner, FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 0, 0));
+}
+/*
+ *
+ */
 void drawBoundingBoxesOnImage(Mat &image,
                               tensorflow::TTypes<float>::Flat scores,
                               tensorflow::TTypes<float>::Flat classes,
