@@ -62,25 +62,16 @@ using namespace cv;
 
 int main(int argc, char* argv[]) {
 
-    // These are the command-line flags the program can understand.
-    // They define where the GRAPH and input data is located, and what kind of
-    // input the model expects. If you train your own model, or use something
-    // other than inception_v3, then you'll need to update these.
-    string imagePath(argv[1]);
+    // Set dirs variables
+    string ROOTDIR = "/data/Y.Disk/work/visme/detector-v-2/";
     string GRAPH = "models/ssd_mobilenet_v1_coco_+_egohands_+_extended/inference/frozen_inference_graph.pb";
     string LABELS = "data/labels_map.pbtxt";
 
-    int32 inputWidth = 299;
-    int32 inputHeight = 299;
-    float inputMean = 0;
-    float inputStd = 255;
-
+    // Set input & output nodes names
     string inputLayer = "image_tensor:0";
     vector<string> outputLayer = {"detection_boxes:0", "detection_scores:0", "detection_classes:0", "num_detections:0"};
 
-    string ROOTDIR = "/data/Y.Disk/work/visme/detector-v-2/";
-
-    // First we load and initialize the model.
+    // Load and initialize the model from .pb file
     std::unique_ptr<tensorflow::Session> session;
     string graphPath = tensorflow::io::JoinPath(ROOTDIR, GRAPH);
     LOG(INFO) << "graphPath:" << graphPath;
@@ -92,94 +83,58 @@ int main(int argc, char* argv[]) {
         LOG(INFO) << "loadGraph(): frozen graph loaded" << endl;
 
 
-    // Get the image from disk as a float array of numbers, resized and normalized
-    // to the specifications the main GRAPH expects.
-    std::vector<Tensor> resizedTensors;
-    Status readTensorStatus =
-            readTensorFromImageFile(imagePath, inputHeight, inputWidth, inputMean,
-                                    inputStd, &resizedTensors);
-    if (!readTensorStatus.ok()) {
-        LOG(ERROR) << readTensorStatus;
-        return -1;
-    }
-    const Tensor& resizedTensor = resizedTensors[0];
-
-    LOG(ERROR) << "image shape:" << resizedTensor.shape().DebugString() << ",len:" << resizedTensors.size() << ",tensor type:" << resizedTensor.dtype();
-    // << ",data:" << resizedTensor.flat<tensorflow::uint8>();
-
-    // Actually run the image through the model.
-    std::vector<Tensor> outputs;
-    Status runStatus = session->Run({{inputLayer, resizedTensor}},
-                                     outputLayer, {}, &outputs);
-    if (!runStatus.ok()) {
-        LOG(ERROR) << "Running model failed: " << runStatus;
-        return -1;
-    }
-
-    int imageWidth = resizedTensor.dims();
-    int imageHeight = 0;
-    //int imageHeight = resizedTensor.shape()[1];
-
-    LOG(ERROR) << "size:" << outputs.size() << ",imageWidth:" << imageWidth << ",imageHeight:" << imageHeight << endl;
-
-    //tensorflow::TTypes<float>::Flat iNum = outputs[0].flat<float>();
-    tensorflow::TTypes<float>::Flat scores = outputs[1].flat<float>();
-    tensorflow::TTypes<float>::Flat classes = outputs[2].flat<float>();
-    tensorflow::TTypes<float>::Flat numDetections = outputs[3].flat<float>();
-    auto boxes = outputs[0].flat_outer_dims<float,3>();
-
-    LOG(ERROR) << "numDetections:" << numDetections(0) << "," << outputs[0].shape().DebugString();
-
-    for(size_t i = 0; i < numDetections(0) && i < 20;++i)
-    {
-        if(scores(i) > 0.5)
-        {
-            LOG(ERROR) << i << ",score:" << scores(i) << ",class:" << classes(i)<< ",box:" << "," << boxes(0,i,0) << "," << boxes(0,i,1) << "," << boxes(0,i,2)<< "," << boxes(0,i,3);
-        }
-    }
-
+    // Load labels map from .pbtxt file
     std::map<int, std::string> labelsMap = std::map<int,std::string>();
-    for (int i = 0; i < 21; i++)
-        labelsMap[i] = "label_" + to_string(i);
+    Status readLabelsMapStatus = readLabelsMapFile(tensorflow::io::JoinPath(ROOTDIR, LABELS), labelsMap);
+    if (!readLabelsMapStatus.ok()) {
+        LOG(ERROR) << "readLabelsMapFile(): ERROR" << loadGraphStatus;
+        return -1;
+    } else
+        LOG(INFO) << "readLabelsMapFile(): labels map loaded" << endl;
 
-    VideoCapture cap(0);//"/data/Y.Disk/work/visme/data/raw/test_left.wmv");
     Mat frame;
     Tensor tensor;
+    std::vector<Tensor> outputs;
+    double threshold = 0.5;
+
+    // Start streaming frames from camera
+    VideoCapture cap(1);
     while (cap.isOpened()) {
         cap >> frame;
         cvtColor(frame, frame, COLOR_BGR2RGB);
 
-        readTensorStatus = readTensorFromMat(frame, 3, tensor);
+        // Convert mat to tensor
+        Status readTensorStatus = readTensorFromMat(frame, 3, tensor);
         if (!readTensorStatus.ok()) {
             LOG(ERROR) << "Mat->Tensor conversion failed: " << readTensorStatus;
             return -1;
         }
 
-        LOG(INFO) << "image shape:" << tensor.shape().DebugString() << ", tensor type:" << tensor.dtype();
-
+        // Run the graph on tensor
         outputs.clear();
-        runStatus = session->Run({{inputLayer, tensor}}, outputLayer, {}, &outputs);
+        Status runStatus = session->Run({{inputLayer, tensor}}, outputLayer, {}, &outputs);
         if (!runStatus.ok()) {
             LOG(ERROR) << "Running model failed: " << runStatus;
             return -1;
         }
 
-        //iNum = outputs[0].flat<float>();
-        scores = outputs[1].flat<float>();
-        classes = outputs[2].flat<float>();
-        numDetections = outputs[3].flat<float>();
-        boxes = outputs[0].flat_outer_dims<float,3>();
+        // Extract results from the outputs vector
+        tensorflow::TTypes<float>::Flat scores = outputs[1].flat<float>();
+        tensorflow::TTypes<float>::Flat classes = outputs[2].flat<float>();
+        tensorflow::TTypes<float>::Flat numDetections = outputs[3].flat<float>();
+        tensorflow::TTypes<float, 3>::Tensor boxes = outputs[0].flat_outer_dims<float,3>();
 
-        LOG(INFO) << "numDetections:" << numDetections(0) << "," << outputs[0].shape().DebugString();
+        for(size_t i = 0; i < numDetections(0) && i < 20; ++i)
+            if(scores(i) > threshold)
+                LOG(INFO) << "score:" << scores(i) << ",class:" << labelsMap[classes(i)] << " ("
+                          << classes(i) << "), box:" << "," << boxes(0,i,0) << "," << boxes(0,i,1) << ","
+                          << boxes(0,i,2)<< "," << boxes(0,i,3);
 
-        for(size_t i = 0; i < numDetections(0) && i < 20;++i)
-            if(scores(i) > 0.5)
-                LOG(INFO) << i << ",score:" << scores(i) << ",class:" << classes(i)<< ",box:" << "," << boxes(0,i,0) << "," << boxes(0,i,1) << "," << boxes(0,i,2)<< "," << boxes(0,i,3);
-
+        // Draw bboxes and captions
         cvtColor(frame, frame, COLOR_BGR2RGB);
-        drawBoundingBoxesOnImage(frame, scores, classes, boxes, labelsMap, 0.5);
+        drawBoundingBoxesOnImage(frame, scores, classes, boxes, labelsMap, threshold);
         imshow("stream", frame);
-        waitKey(10);
+        waitKey(25);
     }
     destroyAllWindows();
 

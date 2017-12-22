@@ -3,7 +3,7 @@ project(tf_detector_example)
 
 set(CMAKE_CXX_STANDARD 11)
 
-set(SOURCE_FILES main.cpp utils.cpp utils.h backup.cpp)
+set(SOURCE_FILES main.cpp utils.cpp utils.h)
 add_executable(tf_detector_example ${SOURCE_FILES})
 
 # Eigen lib headers

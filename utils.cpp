@@ -5,6 +5,7 @@
 #include <utility>
 #include <vector>
 #include <iostream>
+#include <regex>
 
 #include "tensorflow/cc/ops/const_op.h"
 #include "tensorflow/cc/ops/image_ops.h"
@@ -41,7 +42,7 @@ using tensorflow::int32;
 /** Read a model graph definition (xxx.pb) from disk, and creates a session object you can use to run it.
  */
 Status loadGraph(const string &graph_file_name,
-                 std::unique_ptr<tensorflow::Session> *session) {
+                 unique_ptr<tensorflow::Session> *session) {
     tensorflow::GraphDef graph_def;
     Status load_graph_status =
             ReadBinaryProto(tensorflow::Env::Default(), graph_file_name, &graph_def);
@@ -59,107 +60,39 @@ Status loadGraph(const string &graph_file_name,
 
 /** Read a labels map file (xxx.pbtxt) from disk to translate class numbers into human-readable labels.
  */
-Status readLabelsFile(const string &file_name) {
-    // TODO: implement
-    return Status::OK();
-}
+Status readLabelsMapFile(const string &fileName, map<int, string> &labelsMap) {
 
-static Status ReadEntireFile(tensorflow::Env* env, const string& filename,
-                             Tensor* output) {
-    tensorflow::uint64 file_size = 0;
-    TF_RETURN_IF_ERROR(env->GetFileSize(filename, &file_size));
+    // Read file into a string
+    ifstream t(fileName);
+    if (t.bad())
+        return tensorflow::errors::NotFound("Failed to load labels map at '", fileName, "'");
+    stringstream buffer;
+    buffer << t.rdbuf();
+    string fileString = buffer.str();
 
-    string contents;
-    contents.resize(file_size);
+    // Split it by ',' and parse each entry
+    size_t pos = 0;
+    string token;
+    smatch matcher;
+    const regex reId("[0-9]+");
+    const regex reName("\'[A-Z-]+\'");
 
-    std::unique_ptr<tensorflow::RandomAccessFile> file;
-    TF_RETURN_IF_ERROR(env->NewRandomAccessFile(filename, &file));
+    int id;
+    string name;
 
-    tensorflow::StringPiece data;
-    TF_RETURN_IF_ERROR(file->Read(0, file_size, &data, &(contents)[0]));
-    if (data.size() != file_size) {
-        return tensorflow::errors::DataLoss("Truncated read of '", filename,
-                                            "' expected ", file_size, " got ",
-                                            data.size());
+    while ((pos = fileString.find(",")) != string::npos) {
+        token = fileString.substr(0, pos);
+        if (regex_search(token, matcher, reId)) {
+            id = stoi(matcher[0].str());
+        } else
+            continue;
+        if (regex_search(token, matcher, reName)) {
+            name = matcher[0].str().substr(1, matcher[0].str().length() - 2);
+        } else
+            continue;
+        fileString.erase(0, pos + 1);
+        labelsMap.insert(pair<int, string>(id, name));
     }
-    output->scalar<string>()() = data.ToString();
-    return Status::OK();
-}
-
-/** Given an image file name, read in the data, try to decode it as an image,
- *  resize it to the requested size, and then scale the values as desired.
- */
-Status readTensorFromImageFile(const string &file_name, const int input_height,
-                               const int input_width, const float input_mean,
-                               const float input_std,
-                               std::vector<Tensor> *out_tensors) {
-    auto root = tensorflow::Scope::NewRootScope();
-    using namespace ::tensorflow::ops;  // NOLINT(build/namespaces)
-
-    // read file_name into a tensor named input
-    Tensor input(tensorflow::DT_STRING, tensorflow::TensorShape());
-    TF_RETURN_IF_ERROR(
-            ReadEntireFile(tensorflow::Env::Default(), file_name, &input));
-
-    // use a placeholder to read input data
-    auto file_reader =
-            Placeholder(root.WithOpName("input"), tensorflow::DataType::DT_STRING);
-
-    std::vector<std::pair<string, tensorflow::Tensor>> inputs = {
-            {"input", input},
-    };
-
-    // Now try to figure out what kind of file it is and decode it.
-    const int wanted_channels = 3;
-    tensorflow::Output image_reader;
-    if (tensorflow::StringPiece(file_name).ends_with(".png")) {
-        image_reader = DecodePng(root.WithOpName("png_reader"), file_reader,
-                                 DecodePng::Channels(wanted_channels));
-    } else if (tensorflow::StringPiece(file_name).ends_with(".gif")) {
-        // gif decoder returns 4-D tensor, remove the first dim
-        image_reader =
-                Squeeze(root.WithOpName("squeeze_first_dim"),
-                        DecodeGif(root.WithOpName("gif_reader"), file_reader));
-    } else {
-        // Assume if it's neither a PNG nor a GIF then it must be a JPEG.
-        image_reader = DecodeJpeg(root.WithOpName("jpeg_reader"), file_reader,
-                                  DecodeJpeg::Channels(wanted_channels));
-    }
-    // Now cast the image data to float so we can do normal math on it.
-    // auto float_caster =
-    //     Cast(root.WithOpName("float_caster"), image_reader, tensorflow::DT_FLOAT);
-
-    auto uint8_caster =  Cast(root.WithOpName("uint8_caster"), image_reader, tensorflow::DT_UINT8);
-
-    // The convention for image ops in TensorFlow is that all images are expected
-    // to be in batches, so that they're four-dimensional arrays with indices of
-    // [batch, height, width, channel]. Because we only have a single image, we
-    // have to add a batch dimension of 1 to the start with ExpandDims().
-    auto dims_expander = ExpandDims(root.WithOpName("dim"), uint8_caster, 0);
-
-    // Bilinearly resize the image to fit the required dimensions.
-    // auto resized = ResizeBilinear(
-    //     root, dims_expander,
-    //     Const(root.WithOpName("size"), {input_height, input_width}));
-
-
-    // Subtract the mean and divide by the scale.
-    // auto div =  Div(root.WithOpName(output_name), Sub(root, dims_expander, {input_mean}),
-    //     {input_std});
-
-
-    //cast to int
-    //auto uint8_caster =  Cast(root.WithOpName("uint8_caster"), div, tensorflow::DT_UINT8);
-
-    // This runs the GraphDef network definition that we've just constructed, and
-    // returns the results in the output tensor.
-    tensorflow::GraphDef graph;
-    TF_RETURN_IF_ERROR(root.ToGraphDef(&graph));
-
-    std::unique_ptr<tensorflow::Session> session(
-            tensorflow::NewSession(tensorflow::SessionOptions()));
-    TF_RETURN_IF_ERROR(session->Create(graph));
-    TF_RETURN_IF_ERROR(session->Run({inputs}, {"dim"}, {}, out_tensors));
     return Status::OK();
 }
 
@@ -193,7 +126,7 @@ Status readTensorFromMat(Mat mat, int inputDepth, Tensor &tensor) {
     }
 
     auto input_tensor = Placeholder(root.WithOpName("input"), tensorflow::DT_FLOAT);
-    std::vector<std::pair<string, tensorflow::Tensor>> inputs = {{"input", tensor}};
+    vector<pair<string, tensorflow::Tensor>> inputs = {{"input", tensor}};
     auto uint8_caster = Cast(root.WithOpName("uint8_cast"), tensor, tensorflow::DT_UINT8);
 
     // This runs the GraphDef network definition that we've just constructed, and
@@ -201,8 +134,8 @@ Status readTensorFromMat(Mat mat, int inputDepth, Tensor &tensor) {
     tensorflow::GraphDef graph;
     TF_RETURN_IF_ERROR(root.ToGraphDef(&graph));
 
-    std::vector<Tensor> out_tensors;
-    std::unique_ptr<tensorflow::Session> session(tensorflow::NewSession(tensorflow::SessionOptions()));
+    vector<Tensor> out_tensors;
+    unique_ptr<tensorflow::Session> session(tensorflow::NewSession(tensorflow::SessionOptions()));
 
     TF_RETURN_IF_ERROR(session->Create(graph));
     TF_RETURN_IF_ERROR(session->Run({inputs}, {"uint8_cast"}, {}, &out_tensors));
@@ -214,7 +147,7 @@ Status readTensorFromMat(Mat mat, int inputDepth, Tensor &tensor) {
 /** Draw bounding box and add caption to the image.
  *  Boolean flag _scaled_ shows if the passed coordinates are in relative units (true by default in tensorflow detection)
  */
-void drawBoundingBoxOnImage(Mat &image, double yMin, double xMin, double yMax, double xMax, double score, std::string label, bool scaled=true) {
+void drawBoundingBoxOnImage(Mat &image, double yMin, double xMin, double yMax, double xMax, double score, string label, bool scaled=true) {
     cv::Point tl, br;
     if (scaled) {
         tl = cv::Point((int) (xMin * image.cols), (int) (yMin * image.rows));
@@ -223,7 +156,6 @@ void drawBoundingBoxOnImage(Mat &image, double yMin, double xMin, double yMax, d
         tl = cv::Point((int) xMin, (int) yMin);
         br = cv::Point((int) xMax, (int) yMax);
     }
-    cout << tl << " and " << br << endl;
     cv::rectangle(image, tl, br, cv::Scalar(0, 255, 255), 1);
 
     // Ceiling the score down to 3 decimals (weird!)
@@ -233,7 +165,7 @@ void drawBoundingBoxOnImage(Mat &image, double yMin, double xMin, double yMax, d
 
     // Adding caption of type "LABEL (X.XXX)" to the top-left corner of the bounding box
     int fontCoeff = 12;
-    cv::Point brRect = cv::Point(tl.x + caption.length() * fontCoeff / 1.8, tl.y + fontCoeff);
+    cv::Point brRect = cv::Point(tl.x + caption.length() * fontCoeff / 1.6, tl.y + fontCoeff);
     cv::rectangle(image, tl, brRect, cv::Scalar(0, 255, 255), -1);
     cv::Point textCorner = cv::Point(tl.x, tl.y + fontCoeff * 0.9);
     cv::putText(image, caption, textCorner, FONT_HERSHEY_SIMPLEX, 0.4, cv::Scalar(255, 0, 0));
@@ -246,7 +178,7 @@ void drawBoundingBoxesOnImage(Mat &image,
                               tensorflow::TTypes<float>::Flat scores,
                               tensorflow::TTypes<float>::Flat classes,
                               tensorflow::TTypes<float,3>::Tensor boxes,
-                              map<int, std::string> labelsMap, double threshold=0.5) {
+                              map<int, string> labelsMap, double threshold=0.5) {
     for (int j = 0; j < scores.size(); j++)
         if (scores(j) > threshold)
             drawBoundingBoxOnImage(image, boxes(0,j,0), boxes(0,j,1), boxes(0,j,2), boxes(0,j,3), scores(j), labelsMap[classes(j)]);

@@ -14,8 +14,7 @@ using tensorflow::Status;
 using tensorflow::string;
 
 
-Status readLabelsFile(const string &file_name, std::vector<string> *result,
-                      size_t *found_label_count);
+Status readLabelsMapFile(const string &fileName, std::map<int, string> &labelsMap);
 
 Status readTensorFromImageFile(const string &file_name, const int input_height,
                                const int input_width, const float input_mean,
