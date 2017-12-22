@@ -37,26 +37,27 @@ using tensorflow::Status;
 using tensorflow::string;
 using tensorflow::int32;
 
-// Takes a file name, and loads a list of labels from it, one per line, and
-// returns a vector of the strings. It pads with empty strings so the length
-// of the result is a multiple of 16, because our model expects that.
-Status ReadLabelsFile(const string& file_name, std::vector<string>* result,
-                      size_t* found_label_count) {
-    std::ifstream file(file_name);
-    if (!file) {
-        return tensorflow::errors::NotFound("Labels file ", file_name,
-                                            " not found.");
+// Reads a model graph definition from disk, and creates a session object you
+// can use to run it.
+Status loadGraph(const string &graph_file_name,
+                 std::unique_ptr<tensorflow::Session> *session) {
+    tensorflow::GraphDef graph_def;
+    Status load_graph_status =
+            ReadBinaryProto(tensorflow::Env::Default(), graph_file_name, &graph_def);
+    if (!load_graph_status.ok()) {
+        return tensorflow::errors::NotFound("Failed to load compute graph at '",
+                                            graph_file_name, "'");
     }
-    result->clear();
-    string line;
-    while (std::getline(file, line)) {
-        result->push_back(line);
+    session->reset(tensorflow::NewSession(tensorflow::SessionOptions()));
+    Status session_create_status = (*session)->Create(graph_def);
+    if (!session_create_status.ok()) {
+        return session_create_status;
     }
-    *found_label_count = result->size();
-    const int padding = 16;
-    while (result->size() % padding) {
-        result->emplace_back();
-    }
+    return Status::OK();
+}
+
+Status readLabelsFile(const string &file_name) {
+    // TODO: implement
     return Status::OK();
 }
 
@@ -84,15 +85,12 @@ static Status ReadEntireFile(tensorflow::Env* env, const string& filename,
 
 // Given an image file name, read in the data, try to decode it as an image,
 // resize it to the requested size, and then scale the values as desired.
-Status ReadTensorFromImageFile(const string& file_name, const int input_height,
+Status readTensorFromImageFile(const string &file_name, const int input_height,
                                const int input_width, const float input_mean,
                                const float input_std,
-                               std::vector<Tensor>* out_tensors) {
+                               std::vector<Tensor> *out_tensors) {
     auto root = tensorflow::Scope::NewRootScope();
     using namespace ::tensorflow::ops;  // NOLINT(build/namespaces)
-
-    string input_name = "file_reader";
-    string output_name = "normalized";
 
     // read file_name into a tensor named input
     Tensor input(tensorflow::DT_STRING, tensorflow::TensorShape());
@@ -161,65 +159,56 @@ Status ReadTensorFromImageFile(const string& file_name, const int input_height,
     return Status::OK();
 }
 
-// Reads a model graph definition from disk, and creates a session object you
-// can use to run it.
-Status LoadGraph(const string& graph_file_name,
-                 std::unique_ptr<tensorflow::Session>* session) {
-    tensorflow::GraphDef graph_def;
-    Status load_graph_status =
-            ReadBinaryProto(tensorflow::Env::Default(), graph_file_name, &graph_def);
-    if (!load_graph_status.ok()) {
-        return tensorflow::errors::NotFound("Failed to load compute graph at '",
-                                            graph_file_name, "'");
-    }
-    session->reset(tensorflow::NewSession(tensorflow::SessionOptions()));
-    Status session_create_status = (*session)->Create(graph_def);
-    if (!session_create_status.ok()) {
-        return session_create_status;
-    }
-    return Status::OK();
-}
-
-Status readTensorFromMat(Mat mat, int input_height, int input_width, int input_depth, std::vector<Tensor>* out_tensors) {
+Status readTensorFromMat(Mat mat, int inputDepth, Tensor &tensor) {
 
     auto root = tensorflow::Scope::NewRootScope();
     using namespace ::tensorflow::ops;
 
     tensorflow::TensorShape shape = tensorflow::TensorShape();
-    shape.AddDim(input_height);
-    shape.AddDim(input_width);
-    shape.AddDim(input_depth);
-    Tensor tensor(tensorflow::DT_FLOAT, shape);
+    shape.AddDim(1);
+    shape.AddDim(mat.rows);
+    shape.AddDim(mat.cols);
+    shape.AddDim(3);
+    tensor = Tensor(tensorflow::DT_FLOAT, shape);
 
-    // use a placeholder to read input data
-    auto input_tensor_mapped = tensor.tensor<float, 4>();
-
-    auto matData = (float*) mat.data;
-    for (int y = 0; y < input_height; ++y) {
-        auto source_row = matData + (y * input_width * input_depth);
-        for (int x = 0; x < input_width; ++x) {
-            const float* source_pixel = source_row + (x * input_depth);
-            for (int c = 0; c < input_depth; ++c) {
+    Mat mat32f;
+    mat.convertTo(mat32f, CV_32FC1);
+    auto matData = (float*) mat32f.data;
+    auto inputTensorMapped = tensor.tensor<float, 4>();
+    for (int y = 0; y < mat32f.rows; ++y) {
+        auto source_row = matData + (y * mat32f.cols * inputDepth);
+        for (int x = 0; x < mat32f.cols; ++x) {
+            const float* source_pixel = source_row + (x * inputDepth);
+            for (int c = 0; c < inputDepth; ++c) {
                 const float* source_value = source_pixel + c;
-                input_tensor_mapped(0, y, x, c) = *source_value;
+                inputTensorMapped(0, y, x, c) = *source_value;
             }
         }
     }
-    std::vector<std::pair<string, tensorflow::Tensor>> inputs = {{"input", tensor}};
 
-    // Bilinearly resize the image to fit the required dimensions.
-//     auto resized = ResizeBilinear(
-//         root, dims_expander,
-//         Const(root.WithOpName("size"), {input_height, input_width}));
+    auto input_tensor = Placeholder(root.WithOpName("input"), tensorflow::DT_FLOAT);
+    std::vector<std::pair<string, tensorflow::Tensor>> inputs = {{"input", tensor}};
+    auto uint8_caster = Cast(root.WithOpName("uint8_cast"), tensor, tensorflow::DT_UINT8);
 
     // This runs the GraphDef network definition that we've just constructed, and
     // returns the results in the output tensor.
     tensorflow::GraphDef graph;
     TF_RETURN_IF_ERROR(root.ToGraphDef(&graph));
 
-    std::unique_ptr<tensorflow::Session> session(
-            tensorflow::NewSession(tensorflow::SessionOptions()));
+    std::vector<Tensor> out_tensors;
+    std::unique_ptr<tensorflow::Session> session(tensorflow::NewSession(tensorflow::SessionOptions()));
+
     TF_RETURN_IF_ERROR(session->Create(graph));
-    TF_RETURN_IF_ERROR(session->Run({inputs}, {"dim"}, {}, out_tensors));
+    TF_RETURN_IF_ERROR(session->Run({inputs}, {"uint8_cast"}, {}, &out_tensors));
+
+    tensor = out_tensors.at(0);
     return Status::OK();
+}
+
+void drawBoundingBoxesOnImage(Mat image,
+                              tensorflow::TTypes<float>::Flat scores,
+                              tensorflow::TTypes<float>::Flat classes,
+                              tensorflow::TTypes<float,3>::Tensor boxes,
+                              map<int, std::string> labelsMap) {
+    //TODO: implement
 }

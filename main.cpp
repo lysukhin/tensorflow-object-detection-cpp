@@ -74,6 +74,7 @@ int main(int argc, char* argv[]) {
     int32 inputHeight = 299;
     float inputMean = 0;
     float inputStd = 255;
+
     string inputLayer = "image_tensor:0";
     vector<string> outputLayer = {"detection_boxes:0", "detection_scores:0", "detection_classes:0", "num_detections:0"};
 
@@ -82,20 +83,20 @@ int main(int argc, char* argv[]) {
     // First we load and initialize the model.
     std::unique_ptr<tensorflow::Session> session;
     string graphPath = tensorflow::io::JoinPath(ROOTDIR, GRAPH);
-    LOG(ERROR) << "graphPath:" << graphPath;
-    Status loadGraphStatus = LoadGraph(graphPath, &session);
+    LOG(INFO) << "graphPath:" << graphPath;
+    Status loadGraphStatus = loadGraph(graphPath, &session);
     if (!loadGraphStatus.ok()) {
-        LOG(ERROR) << "LoadGraph(): ERROR" << loadGraphStatus;
+        LOG(ERROR) << "loadGraph(): ERROR" << loadGraphStatus;
         return -1;
     } else
-        LOG(ERROR) << "LoadGraph(): frozen graph loaded" << loadGraphStatus;
+        LOG(INFO) << "loadGraph(): frozen graph loaded" << endl;
 
 
     // Get the image from disk as a float array of numbers, resized and normalized
     // to the specifications the main GRAPH expects.
     std::vector<Tensor> resizedTensors;
     Status readTensorStatus =
-            ReadTensorFromImageFile(imagePath, inputHeight, inputWidth, inputMean,
+            readTensorFromImageFile(imagePath, inputHeight, inputWidth, inputMean,
                                     inputStd, &resizedTensors);
     if (!readTensorStatus.ok()) {
         LOG(ERROR) << readTensorStatus;
@@ -126,7 +127,7 @@ int main(int argc, char* argv[]) {
     tensorflow::TTypes<float>::Flat classes = outputs[2].flat<float>();
     tensorflow::TTypes<float>::Flat numDetections = outputs[3].flat<float>();
     auto boxes = outputs[0].flat_outer_dims<float,3>();
-
+    
     LOG(ERROR) << "numDetections:" << numDetections(0) << "," << outputs[0].shape().DebugString();
 
     for(size_t i = 0; i < numDetections(0) && i < 20;++i)
@@ -137,13 +138,42 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    VideoCapture cap(1);
+    VideoCapture cap("/data/Y.Disk/work/visme/data/raw/test_left.wmv");
     Mat frame;
+    Tensor tensor;
     while (cap.isOpened()) {
         cap >> frame;
         imshow("stream", frame);
+        cvtColor(frame, frame, COLOR_BGR2RGB);
+
+        readTensorStatus = readTensorFromMat(frame, 3, tensor);
+        if (!readTensorStatus.ok()) {
+            LOG(ERROR) << "Mat->Tensor conversion failed: " << readTensorStatus;
+            return -1;
+        }
+
+        LOG(INFO) << "image shape:" << tensor.shape().DebugString() << ", tensor type:" << tensor.dtype();
+
+        outputs.clear();
+        runStatus = session->Run({{inputLayer, tensor}}, outputLayer, {}, &outputs);
+        if (!runStatus.ok()) {
+            LOG(ERROR) << "Running model failed: " << runStatus;
+            return -1;
+        }
+
+        //iNum = outputs[0].flat<float>();
+        scores = outputs[1].flat<float>();
+        classes = outputs[2].flat<float>();
+        numDetections = outputs[3].flat<float>();
+        boxes = outputs[0].flat_outer_dims<float,3>();
+
+        LOG(INFO) << "numDetections:" << numDetections(0) << "," << outputs[0].shape().DebugString();
+
+        for(size_t i = 0; i < numDetections(0) && i < 20;++i)
+            if(scores(i) > 0.5)
+                LOG(INFO) << i << ",score:" << scores(i) << ",class:" << classes(i)<< ",box:" << "," << boxes(0,i,0) << "," << boxes(0,i,1) << "," << boxes(0,i,2)<< "," << boxes(0,i,3);
+
         waitKey(10);
-        cout << "frame read..." << endl;
     }
     destroyAllWindows();
 
