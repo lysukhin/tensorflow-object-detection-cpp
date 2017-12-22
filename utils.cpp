@@ -205,10 +205,26 @@ Status readTensorFromMat(Mat mat, int inputDepth, Tensor &tensor) {
     return Status::OK();
 }
 
-void drawBoundingBoxesOnImage(Mat image,
+void drawBoundingBoxOnImage(Mat &image, double yMin, double xMin, double yMax, double xMax, double score, std::string label, bool scaled=true) {
+    cv::Point tl, br;
+    if (scaled) {
+        tl = cv::Point((int) (xMin * image.cols), (int) (yMin * image.rows));
+        br = cv::Point((int) (xMax * image.cols), (int) (yMax * image.rows));
+    } else {
+        tl = cv::Point((int) xMin, (int) yMin);
+        br = cv::Point((int) xMax, (int) yMax);
+    }
+    cout << tl << " and " << br << endl;
+    cv::rectangle(image, tl, br, cv::Scalar(0, 255, 0), 2);
+    //TODO: implement
+}
+
+void drawBoundingBoxesOnImage(Mat &image,
                               tensorflow::TTypes<float>::Flat scores,
                               tensorflow::TTypes<float>::Flat classes,
                               tensorflow::TTypes<float,3>::Tensor boxes,
-                              map<int, std::string> labelsMap) {
-    //TODO: implement
+                              map<int, std::string> labelsMap, double threshold=0.5) {
+    for (int j = 0; j < scores.size(); j++)
+        if (scores(j) > threshold)
+            drawBoundingBoxOnImage(image, boxes(0,j,0), boxes(0,j,1), boxes(0,j,2), boxes(0,j,3), scores(j), labelsMap[classes(j)]);
 }

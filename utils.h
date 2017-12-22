@@ -26,3 +26,11 @@ Status loadGraph(const string &graph_file_name,
                  std::unique_ptr<tensorflow::Session> *session);
 
 Status readTensorFromMat(cv::Mat mat, int inputDepth, Tensor &out_tensor);
+
+void drawBoundingBoxOnImage(cv::Mat &image, double xMin, double yMin, double xMax, double yMax, double score, std::string label, bool scaled);
+
+void drawBoundingBoxesOnImage(cv::Mat &image,
+                              tensorflow::TTypes<float>::Flat scores,
+                              tensorflow::TTypes<float>::Flat classes,
+                              tensorflow::TTypes<float,3>::Tensor boxes,
+                              std::map<int, std::string> labelsMap, double threshold);

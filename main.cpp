@@ -127,7 +127,7 @@ int main(int argc, char* argv[]) {
     tensorflow::TTypes<float>::Flat classes = outputs[2].flat<float>();
     tensorflow::TTypes<float>::Flat numDetections = outputs[3].flat<float>();
     auto boxes = outputs[0].flat_outer_dims<float,3>();
-    
+
     LOG(ERROR) << "numDetections:" << numDetections(0) << "," << outputs[0].shape().DebugString();
 
     for(size_t i = 0; i < numDetections(0) && i < 20;++i)
@@ -138,12 +138,15 @@ int main(int argc, char* argv[]) {
         }
     }
 
+    std::map<int, std::string> labelsMap = std::map<int,std::string>();
+    for (int i = 0; i < 21; i++)
+        labelsMap[i] = "test label #" + to_string(i);
+
     VideoCapture cap("/data/Y.Disk/work/visme/data/raw/test_left.wmv");
     Mat frame;
     Tensor tensor;
     while (cap.isOpened()) {
         cap >> frame;
-        imshow("stream", frame);
         cvtColor(frame, frame, COLOR_BGR2RGB);
 
         readTensorStatus = readTensorFromMat(frame, 3, tensor);
@@ -173,6 +176,8 @@ int main(int argc, char* argv[]) {
             if(scores(i) > 0.5)
                 LOG(INFO) << i << ",score:" << scores(i) << ",class:" << classes(i)<< ",box:" << "," << boxes(0,i,0) << "," << boxes(0,i,1) << "," << boxes(0,i,2)<< "," << boxes(0,i,3);
 
+        drawBoundingBoxesOnImage(frame, scores, classes, boxes, labelsMap, 0.5);
+        imshow("stream", frame);
         waitKey(10);
     }
     destroyAllWindows();
