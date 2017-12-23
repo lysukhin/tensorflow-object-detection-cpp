@@ -36,14 +36,9 @@ using namespace cv;
 int main(int argc, char* argv[]) {
 
     // Set dirs variables
-
-//    string ROOTDIR = "../";
-//    string GRAPH = "demo/ssd_mobilenet_v1_egohands/frozen_inference_graph.pb";
-//    string LABELS = "demo/ssd_mobilenet_v1_egohands/labels_map.pbtxt";
-
-    string ROOTDIR = "/data/Y.Disk/work/visme/detector-v-2";
-    string GRAPH = "/models/ssd_mobilenet_v1_coco_+_egohands_+_extended/inference/frozen_inference_graph.pb";
-    string LABELS = "data/labels_map.pbtxt";
+    string ROOTDIR = "../";
+    string GRAPH = "demo/ssd_mobilenet_v1_egohands/frozen_inference_graph.pb";
+    string LABELS = "demo/ssd_mobilenet_v1_egohands/labels_map.pbtxt";
 
     // Set input & output nodes names
     string inputLayer = "image_tensor:0";
