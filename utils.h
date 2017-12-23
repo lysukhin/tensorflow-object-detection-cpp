@@ -16,11 +16,6 @@ using tensorflow::string;
 
 Status readLabelsMapFile(const string &fileName, std::map<int, string> &labelsMap);
 
-Status readTensorFromImageFile(const string &file_name, const int input_height,
-                               const int input_width, const float input_mean,
-                               const float input_std,
-                               std::vector<Tensor> *out_tensors);
-
 Status loadGraph(const string &graph_file_name,
                  std::unique_ptr<tensorflow::Session> *session);
 

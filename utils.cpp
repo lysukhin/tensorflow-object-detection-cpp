@@ -70,27 +70,33 @@ Status readLabelsMapFile(const string &fileName, map<int, string> &labelsMap) {
     buffer << t.rdbuf();
     string fileString = buffer.str();
 
-    // Split it by ',' and parse each entry
-    size_t pos = 0;
-    string token;
-    smatch matcher;
+    // Search entry patterns of type 'item { ... }' and parse each of them
+    smatch matcherEntry;
+    smatch matcherId;
+    smatch matcherName;
+    const regex reEntry("item \\{([\\S\\s]*?)\\}");
     const regex reId("[0-9]+");
-    const regex reName("\'[A-Z-]+\'");
+    const regex reName("\'.+\'");
+    string entry;
+
+    auto stringBegin = sregex_iterator(fileString.begin(), fileString.end(), reEntry);
+    auto stringEnd = sregex_iterator();
 
     int id;
     string name;
-
-    while ((pos = fileString.find(",")) != string::npos) {
-        token = fileString.substr(0, pos);
-        if (regex_search(token, matcher, reId)) {
-            id = stoi(matcher[0].str());
-        } else
+    for (sregex_iterator i = stringBegin; i != stringEnd; i++) {
+        matcherEntry = *i;
+        entry = matcherEntry.str();
+        regex_search(entry, matcherId, reId);
+        if (!matcherId.empty())
+            id = stoi(matcherId[0].str());
+        else
             continue;
-        if (regex_search(token, matcher, reName)) {
-            name = matcher[0].str().substr(1, matcher[0].str().length() - 2);
-        } else
+        regex_search(entry, matcherName, reName);
+        if (!matcherName.empty())
+            name = matcherName[0].str().substr(1, matcherName[0].str().length() - 2);
+        else
             continue;
-        fileString.erase(0, pos + 1);
         labelsMap.insert(pair<int, string>(id, name));
     }
     return Status::OK();
