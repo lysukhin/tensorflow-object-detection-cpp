@@ -22,6 +22,8 @@
 #include <opencv2/imgproc/imgproc.hpp>
 #include <cv.hpp>
 
+#include <time.h>
+
 #include "utils.h"
 
 using tensorflow::Flag;
@@ -36,6 +38,7 @@ using namespace cv;
 int main(int argc, char* argv[]) {
 
     // Set dirs variables
+
     string ROOTDIR = "../";
     string GRAPH = "demo/ssd_mobilenet_v1_egohands/frozen_inference_graph.pb";
     string LABELS = "demo/ssd_mobilenet_v1_egohands/labels_map.pbtxt";
@@ -70,13 +73,36 @@ int main(int argc, char* argv[]) {
     std::vector<Tensor> outputs;
     double threshold = 0.5;
 
+    // FPS count
+    int nFrames = 10;
+    int iFrame = 0;
+    time_t start, end;
+    time(&start);
+
     // Start streaming frames from camera
-    VideoCapture cap(1);
+    VideoCapture cap(0);
     while (cap.isOpened()) {
         cap >> frame;
+        pyrDown(frame, frame);
+
+        if (iFrame == nFrames) {
+            iFrame = 0;
+            time(&end);
+            cout << "FPS: " << nFrames / difftime(end, start) << endl;
+            time(&start);
+        } else
+            iFrame++;
+
         cvtColor(frame, frame, COLOR_BGR2RGB);
 
         // Convert mat to tensor
+        tensorflow::TensorShape shape = tensorflow::TensorShape();
+        shape.AddDim(1);
+        shape.AddDim(frame.rows);
+        shape.AddDim(frame.cols);
+        shape.AddDim(3);
+        tensor = Tensor(tensorflow::DT_FLOAT, shape);
+
         Status readTensorStatus = readTensorFromMat(frame, 3, tensor);
         if (!readTensorStatus.ok()) {
             LOG(ERROR) << "Mat->Tensor conversion failed: " << readTensorStatus;
@@ -107,7 +133,7 @@ int main(int argc, char* argv[]) {
         cvtColor(frame, frame, COLOR_BGR2RGB);
         drawBoundingBoxesOnImage(frame, scores, classes, boxes, labelsMap, threshold);
         imshow("stream", frame);
-        waitKey(25);
+        waitKey(5);
     }
     destroyAllWindows();
 

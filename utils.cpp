@@ -109,13 +109,6 @@ Status readTensorFromMat(Mat mat, int inputDepth, Tensor &tensor) {
     auto root = tensorflow::Scope::NewRootScope();
     using namespace ::tensorflow::ops;
 
-    tensorflow::TensorShape shape = tensorflow::TensorShape();
-    shape.AddDim(1);
-    shape.AddDim(mat.rows);
-    shape.AddDim(mat.cols);
-    shape.AddDim(3);
-    tensor = Tensor(tensorflow::DT_FLOAT, shape);
-
     Mat mat32f;
     mat.convertTo(mat32f, CV_32FC1);
     auto matData = (float*) mat32f.data;
