@@ -42,7 +42,7 @@ int main(int argc, char* argv[]) {
     string ROOTDIR = "../";
     string GRAPH = "demo/ssd_mobilenet_v1_egohands/frozen_inference_graph.pb";
     string LABELS = "demo/ssd_mobilenet_v1_egohands/labels_map.pbtxt";
-
+    
     // Set input & output nodes names
     string inputLayer = "image_tensor:0";
     vector<string> outputLayer = {"detection_boxes:0", "detection_scores:0", "detection_classes:0", "num_detections:0"};
@@ -76,6 +76,7 @@ int main(int argc, char* argv[]) {
     // FPS count
     int nFrames = 10;
     int iFrame = 0;
+    double fps = 0.;
     time_t start, end;
     time(&start);
 
@@ -88,7 +89,8 @@ int main(int argc, char* argv[]) {
         if (iFrame == nFrames) {
             iFrame = 0;
             time(&end);
-            cout << "FPS: " << nFrames / difftime(end, start) << endl;
+            fps = 1. * nFrames / difftime(end, start);
+//            cout << "FPS: " << fps << endl;
             time(&start);
         } else
             iFrame++;
@@ -132,6 +134,8 @@ int main(int argc, char* argv[]) {
         // Draw bboxes and captions
         cvtColor(frame, frame, COLOR_BGR2RGB);
         drawBoundingBoxesOnImage(frame, scores, classes, boxes, labelsMap, threshold);
+
+        putText(frame, to_string(fps).substr(0, 5), Point(0, frame.rows), FONT_HERSHEY_SIMPLEX, 0.7, Scalar(255, 255, 255));
         imshow("stream", frame);
         waitKey(5);
     }
