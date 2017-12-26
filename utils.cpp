@@ -104,42 +104,32 @@ Status readLabelsMapFile(const string &fileName, map<int, string> &labelsMap) {
 
 /** Convert Mat image into tensor of shape (1, height, width, d) where last three dims are equal to the original dims.
  */
-Status readTensorFromMat(Mat mat, int inputDepth, Tensor &tensor) {
+Status readTensorFromMat(Mat mat, Tensor &outTensor) {
 
     auto root = tensorflow::Scope::NewRootScope();
     using namespace ::tensorflow::ops;
 
-    Mat mat32f;
-    mat.convertTo(mat32f, CV_32FC1);
-    auto matData = (float*) mat32f.data;
-    auto inputTensorMapped = tensor.tensor<float, 4>();
-    for (int y = 0; y < mat32f.rows; ++y) {
-        auto source_row = matData + (y * mat32f.cols * inputDepth);
-        for (int x = 0; x < mat32f.cols; ++x) {
-            const float* source_pixel = source_row + (x * inputDepth);
-            for (int c = 0; c < inputDepth; ++c) {
-                const float* source_value = source_pixel + c;
-                inputTensorMapped(0, y, x, c) = *source_value;
-            }
-        }
-    }
+    // Trick from https://github.com/tensorflow/tensorflow/issues/8033
+    float *p = outTensor.flat<float>().data();
+    Mat fakeMat(mat.rows, mat.cols, CV_32FC3, p);
+    mat.convertTo(fakeMat, CV_32FC3);
 
     auto input_tensor = Placeholder(root.WithOpName("input"), tensorflow::DT_FLOAT);
-    vector<pair<string, tensorflow::Tensor>> inputs = {{"input", tensor}};
-    auto uint8_caster = Cast(root.WithOpName("uint8_cast"), tensor, tensorflow::DT_UINT8);
+    vector<pair<string, tensorflow::Tensor>> inputs = {{"input", outTensor}};
+    auto uint8Caster = Cast(root.WithOpName("uint8_Cast"), outTensor, tensorflow::DT_UINT8);
 
     // This runs the GraphDef network definition that we've just constructed, and
-    // returns the results in the output tensor.
+    // returns the results in the output outTensor.
     tensorflow::GraphDef graph;
     TF_RETURN_IF_ERROR(root.ToGraphDef(&graph));
 
-    vector<Tensor> out_tensors;
+    vector<Tensor> outTensors;
     unique_ptr<tensorflow::Session> session(tensorflow::NewSession(tensorflow::SessionOptions()));
 
     TF_RETURN_IF_ERROR(session->Create(graph));
-    TF_RETURN_IF_ERROR(session->Run({inputs}, {"uint8_cast"}, {}, &out_tensors));
+    TF_RETURN_IF_ERROR(session->Run({inputs}, {"uint8_Cast"}, {}, &outTensors));
 
-    tensor = out_tensors.at(0);
+    outTensor = outTensors.at(0);
     return Status::OK();
 }
 

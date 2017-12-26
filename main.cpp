@@ -39,10 +39,10 @@ int main(int argc, char* argv[]) {
 
     // Set dirs variables
 
-    string ROOTDIR = "../";
-    string GRAPH = "demo/ssd_mobilenet_v1_egohands/frozen_inference_graph.pb";
-    string LABELS = "demo/ssd_mobilenet_v1_egohands/labels_map.pbtxt";
-    
+//    string ROOTDIR = "../";
+//    string GRAPH = "demo/ssd_mobilenet_v1_egohands/frozen_inference_graph.pb";
+//    string LABELS = "demo/ssd_mobilenet_v1_egohands/labels_map.pbtxt";
+
     // Set input & output nodes names
     string inputLayer = "image_tensor:0";
     vector<string> outputLayer = {"detection_boxes:0", "detection_scores:0", "detection_classes:0", "num_detections:0"};
@@ -74,7 +74,7 @@ int main(int argc, char* argv[]) {
     double threshold = 0.5;
 
     // FPS count
-    int nFrames = 10;
+    int nFrames = 25;
     int iFrame = 0;
     double fps = 0.;
     time_t start, end;
@@ -82,30 +82,29 @@ int main(int argc, char* argv[]) {
 
     // Start streaming frames from camera
     VideoCapture cap(0);
+
+    tensorflow::TensorShape shape = tensorflow::TensorShape();
+    shape.AddDim(1);
+    shape.AddDim((int64)cap.get(CAP_PROP_FRAME_HEIGHT));
+    shape.AddDim((int64)cap.get(CAP_PROP_FRAME_WIDTH));
+    shape.AddDim(3);
+
     while (cap.isOpened()) {
         cap >> frame;
-        pyrDown(frame, frame);
+//        pyrDown(frame, frame);
+        cvtColor(frame, frame, COLOR_BGR2RGB);
 
         if (iFrame == nFrames) {
             iFrame = 0;
             time(&end);
             fps = 1. * nFrames / difftime(end, start);
-//            cout << "FPS: " << fps << endl;
             time(&start);
         } else
             iFrame++;
 
-        cvtColor(frame, frame, COLOR_BGR2RGB);
-
         // Convert mat to tensor
-        tensorflow::TensorShape shape = tensorflow::TensorShape();
-        shape.AddDim(1);
-        shape.AddDim(frame.rows);
-        shape.AddDim(frame.cols);
-        shape.AddDim(3);
         tensor = Tensor(tensorflow::DT_FLOAT, shape);
-
-        Status readTensorStatus = readTensorFromMat(frame, 3, tensor);
+        Status readTensorStatus = readTensorFromMat(frame, tensor);
         if (!readTensorStatus.ok()) {
             LOG(ERROR) << "Mat->Tensor conversion failed: " << readTensorStatus;
             return -1;

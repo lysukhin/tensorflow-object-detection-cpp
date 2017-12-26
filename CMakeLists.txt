@@ -24,7 +24,5 @@ include_directories("/usr/local/include/tf/tensorflow/")
 include_directories("/usr/local/include/tf/third-party/")
 
 # Link TensorFlow libs
-#target_link_libraries(tf_detector_example "/usr/local/lib/libtensorflow_cc.so")
-#target_link_libraries(tf_detector_example "/usr/local/lib/libtensorflow_framework.so")
-target_link_libraries(tf_detector_example "/home/lysuhin/Distr/tensorflow/bazel-bin/tensorflow/libtensorflow_cc.so")
-target_link_libraries(tf_detector_example "/home/lysuhin/Distr/tensorflow/bazel-bin/tensorflow/libtensorflow_framework.so")
+target_link_libraries(tf_detector_example "/usr/local/lib/libtensorflow_cc.so")
+target_link_libraries(tf_detector_example "/usr/local/lib/libtensorflow_framework.so")
