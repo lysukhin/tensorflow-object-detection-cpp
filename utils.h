@@ -24,7 +24,14 @@ Status readTensorFromMat(cv::Mat mat, Tensor &outTensor);
 void drawBoundingBoxOnImage(cv::Mat &image, double xMin, double yMin, double xMax, double yMax, double score, std::string label, bool scaled);
 
 void drawBoundingBoxesOnImage(cv::Mat &image,
-                              tensorflow::TTypes<float>::Flat scores,
-                              tensorflow::TTypes<float>::Flat classes,
-                              tensorflow::TTypes<float,3>::Tensor boxes,
-                              std::map<int, std::string> labelsMap, double threshold);
+                              tensorflow::TTypes<float>::Flat &scores,
+                              tensorflow::TTypes<float>::Flat &classes,
+                              tensorflow::TTypes<float,3>::Tensor &boxes,
+                              std::map<int, string> &labelsMap,
+                              std::vector<size_t> &idxs);
+
+double IOU(cv::Rect box1, cv::Rect box2);
+
+std::vector<size_t> filterBoxes(tensorflow::TTypes<float>::Flat &scores,
+                                tensorflow::TTypes<float, 3>::Tensor &boxes,
+                                double thresholdIOU, double thresholdScore);

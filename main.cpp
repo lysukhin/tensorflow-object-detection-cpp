@@ -38,10 +38,9 @@ using namespace cv;
 int main(int argc, char* argv[]) {
 
     // Set dirs variables
-
-//    string ROOTDIR = "../";
-//    string GRAPH = "demo/ssd_mobilenet_v1_egohands/frozen_inference_graph.pb";
-//    string LABELS = "demo/ssd_mobilenet_v1_egohands/labels_map.pbtxt";
+    string ROOTDIR = "../";
+    string LABELS = "demo/ssd_mobilenet_v1_egohands/labels_map.pbtxt";
+    string GRAPH = "demo/ssd_mobilenet_v1_egohands/frozen_inference_graph.pb";
 
     // Set input & output nodes names
     string inputLayer = "image_tensor:0";
@@ -71,7 +70,8 @@ int main(int argc, char* argv[]) {
     Mat frame;
     Tensor tensor;
     std::vector<Tensor> outputs;
-    double threshold = 0.5;
+    double thresholdScore = 0.5;
+    double thresholdIOU = 0.8;
 
     // FPS count
     int nFrames = 25;
@@ -81,7 +81,7 @@ int main(int argc, char* argv[]) {
     time(&start);
 
     // Start streaming frames from camera
-    VideoCapture cap(0);
+    VideoCapture cap(1);
 
     tensorflow::TensorShape shape = tensorflow::TensorShape();
     shape.AddDim(1);
@@ -91,16 +91,15 @@ int main(int argc, char* argv[]) {
 
     while (cap.isOpened()) {
         cap >> frame;
-//        pyrDown(frame, frame);
         cvtColor(frame, frame, COLOR_BGR2RGB);
+        cout << "Frame # " << iFrame << endl;
 
-        if (iFrame == nFrames) {
-            iFrame = 0;
+        if (nFrames % (iFrame + 1) == 0) {
             time(&end);
             fps = 1. * nFrames / difftime(end, start);
             time(&start);
-        } else
-            iFrame++;
+        }
+        iFrame++;
 
         // Convert mat to tensor
         tensor = Tensor(tensorflow::DT_FLOAT, shape);
@@ -124,15 +123,16 @@ int main(int argc, char* argv[]) {
         tensorflow::TTypes<float>::Flat numDetections = outputs[3].flat<float>();
         tensorflow::TTypes<float, 3>::Tensor boxes = outputs[0].flat_outer_dims<float,3>();
 
-        for(size_t i = 0; i < numDetections(0) && i < 20; ++i)
-            if(scores(i) > threshold)
-                LOG(INFO) << "score:" << scores(i) << ",class:" << labelsMap[classes(i)] << " ("
-                          << classes(i) << "), box:" << "," << boxes(0,i,0) << "," << boxes(0,i,1) << ","
-                          << boxes(0,i,2)<< "," << boxes(0,i,3);
+        vector<size_t> goodIdxs = filterBoxes(scores, boxes, thresholdIOU, thresholdScore);
+        for (size_t i = 0; i < goodIdxs.size(); i++)
+            LOG(INFO) << "score:" << scores(goodIdxs.at(i)) << ",class:" << labelsMap[classes(goodIdxs.at(i))]
+                      << " (" << classes(goodIdxs.at(i)) << "), box:" << "," << boxes(0, goodIdxs.at(i), 0) << ","
+                      << boxes(0, goodIdxs.at(i), 1) << "," << boxes(0, goodIdxs.at(i), 2) << ","
+                      << boxes(0, goodIdxs.at(i), 3);
 
         // Draw bboxes and captions
         cvtColor(frame, frame, COLOR_BGR2RGB);
-        drawBoundingBoxesOnImage(frame, scores, classes, boxes, labelsMap, threshold);
+        drawBoundingBoxesOnImage(frame, scores, classes, boxes, labelsMap, goodIdxs);
 
         putText(frame, to_string(fps).substr(0, 5), Point(0, frame.rows), FONT_HERSHEY_SIMPLEX, 0.7, Scalar(255, 255, 255));
         imshow("stream", frame);

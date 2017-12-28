@@ -164,11 +164,75 @@ void drawBoundingBoxOnImage(Mat &image, double yMin, double xMin, double yMax, d
  *  Box is drawn only if corresponding score is higher than the _threshold_.
  */
 void drawBoundingBoxesOnImage(Mat &image,
-                              tensorflow::TTypes<float>::Flat scores,
-                              tensorflow::TTypes<float>::Flat classes,
-                              tensorflow::TTypes<float,3>::Tensor boxes,
-                              map<int, string> labelsMap, double threshold=0.5) {
-    for (int j = 0; j < scores.size(); j++)
-        if (scores(j) > threshold)
-            drawBoundingBoxOnImage(image, boxes(0,j,0), boxes(0,j,1), boxes(0,j,2), boxes(0,j,3), scores(j), labelsMap[classes(j)]);
+                              tensorflow::TTypes<float>::Flat &scores,
+                              tensorflow::TTypes<float>::Flat &classes,
+                              tensorflow::TTypes<float,3>::Tensor &boxes,
+                              map<int, string> &labelsMap,
+                              vector<size_t> &idxs) {
+    for (int j = 0; j < idxs.size(); j++)
+        drawBoundingBoxOnImage(image,
+                               boxes(0,idxs.at(j),0), boxes(0,idxs.at(j),1),
+                               boxes(0,idxs.at(j),2), boxes(0,idxs.at(j),3),
+                               scores(idxs.at(j)), labelsMap[classes(idxs.at(j))]);
 }
+
+/** Calculate intersection-over-union (IOU) for two given bbox Rects.
+ */
+double IOU(Rect2f box1, Rect2f box2) {
+
+    float xA = max(box1.tl().x, box2.tl().x);
+    float yA = max(box1.tl().y, box2.tl().y);
+    float xB = min(box1.br().x, box2.br().x);
+    float yB = min(box1.br().y, box2.br().y);
+
+    float intersectArea = abs((xB - xA) * (yB - yA));
+    float unionArea = abs(box1.area()) + abs(box2.area()) - intersectArea;
+
+    return 1. * intersectArea / unionArea;
+}
+
+/** Return idxs of good boxes (ones with highest confidence score (>= thresholdScore)
+ *  and IOU <= thresholdIOU with others).
+ */
+vector<size_t> filterBoxes(tensorflow::TTypes<float>::Flat &scores,
+                           tensorflow::TTypes<float, 3>::Tensor &boxes,
+                           double thresholdIOU, double thresholdScore) {
+
+    vector<size_t> sortIdxs(scores.size());
+    iota(sortIdxs.begin(), sortIdxs.end(), 0);
+
+    // Create set of "bad" idxs
+    set<size_t> badIdxs = set<size_t>();
+    size_t i = 0;
+    while (i < sortIdxs.size()) {
+        if (scores(sortIdxs.at(i)) < thresholdScore)
+            badIdxs.insert(sortIdxs[i]);
+        if (badIdxs.find(sortIdxs.at(i)) != badIdxs.end()) {
+            i++;
+            continue;
+        }
+
+        Rect2f box1 = Rect2f(Point2f(boxes(0, sortIdxs.at(i), 1), boxes(0, sortIdxs.at(i), 0)),
+                             Point2f(boxes(0, sortIdxs.at(i), 3), boxes(0, sortIdxs.at(i), 2)));
+        for (size_t j = i + 1; j < sortIdxs.size(); j++) {
+            if (scores(sortIdxs.at(j)) < thresholdScore) {
+                badIdxs.insert(sortIdxs[j]);
+                continue;
+            }
+            Rect2f box2 = Rect2f(Point2f(boxes(0, sortIdxs.at(j), 1), boxes(0, sortIdxs.at(j), 0)),
+                                 Point2f(boxes(0, sortIdxs.at(j), 3), boxes(0, sortIdxs.at(j), 2)));
+            if (IOU(box1, box2) > thresholdIOU)
+                badIdxs.insert(sortIdxs[j]);
+        }
+        i++;
+    }
+
+    // Prepare "good" idxs for return
+    vector<size_t> goodIdxs = vector<size_t>();
+    for (auto it = sortIdxs.begin(); it != sortIdxs.end(); it++)
+        if (badIdxs.find(sortIdxs.at(*it)) == badIdxs.end())
+            goodIdxs.push_back(*it);
+
+    return goodIdxs;
+}
+
