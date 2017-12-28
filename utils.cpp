@@ -104,7 +104,7 @@ Status readLabelsMapFile(const string &fileName, map<int, string> &labelsMap) {
 
 /** Convert Mat image into tensor of shape (1, height, width, d) where last three dims are equal to the original dims.
  */
-Status readTensorFromMat(Mat mat, Tensor &outTensor) {
+Status readTensorFromMat(const Mat &mat, Tensor &outTensor) {
 
     auto root = tensorflow::Scope::NewRootScope();
     using namespace ::tensorflow::ops;
