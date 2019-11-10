@@ -14,4 +14,5 @@ Usage:
 4. Have fun
 
 `demo/` dir contains frozen graph & labels map from [victordibia/handstracking](https://github.com/victordibia/handtracking) as an example. 
-Feel free to add your own models and contribute.
+
+## This repo is not supported as long as I switched to PyTorch long ago. TensorFlow (probably) has been updated a couple of times since I created this repo so there's a (huge) chance that something would go wrong.
