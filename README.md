@@ -1,4 +1,9 @@
 # tensorflow-object-detection-cpp
+
+
+## This repo is not supported as long as I switched to PyTorch long ago. TensorFlow (probably) has been updated a couple of times since I created this repo so there's a (huge) chance that something would go wrong.
+
+
 A C++ example of running TensorFlow Object Detection model in live mode.
 Inspired by [issue](https://github.com/tensorflow/models/issues/1741#issuecomment-318613222).
 
@@ -14,5 +19,3 @@ Usage:
 4. Have fun
 
 `demo/` dir contains frozen graph & labels map from [victordibia/handstracking](https://github.com/victordibia/handtracking) as an example. 
-
-## This repo is not supported as long as I switched to PyTorch long ago. TensorFlow (probably) has been updated a couple of times since I created this repo so there's a (huge) chance that something would go wrong.
